@@ -1,3 +1,11 @@
+# Node
+node_modules/
+dist/
+.env
+
+# Terraform-built backend artifact
+infrastructure/build/
+
 # Local .terraform directories
 .terraform/
 
