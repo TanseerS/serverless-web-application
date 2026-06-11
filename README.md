@@ -1,5 +1,8 @@
 # serverless-web-application
 
+<img width="1600" height="840" alt="image" src="https://github.com/user-attachments/assets/5b447a78-ee0f-4bde-ae34-2da5539b9dbc" />
+
+
 A simple full-stack web application deployed on AWS using IaC — Terraform.
 
 A minimal tasks (todo) app: the website is intentionally simple — the focus of this repo is the **Terraform** in [infrastructure/](infrastructure/).
