@@ -12,7 +12,7 @@ Users hit the React frontend on **Amplify** (which builds from **GitHub** on pus
 
 - **Frontend** — React + Vite ([frontend/](frontend/)), hosted on **Amplify**.
 - **Backend** — Node.js + Express + Sequelize ([backend/](backend/)), packaged as a zip and run on **Lambda** behind **API Gateway**.
-- **Database** — **RDS MySQL**, with credentials stored in **Secrets Manager** and fetched by Lambda at runtime.
+- **Database** — **RDS MySQL** in the account's default VPC, with credentials passed to the Lambda as environment variables.
 
 ## AWS services used
 
@@ -22,18 +22,22 @@ Users hit the React frontend on **Amplify** (which builds from **GitHub** on pus
 
 Both are just object storage. S3 is the natural fit for both because state files and zip artifacts are just files that need to persist reliably.
 
-### Secrets Manager
-Stores the RDS **username, password, host, port, and database name** as a single JSON secret. Lambda fetches this at runtime via an SDK call. The password never sits in an environment variable or in plaintext in the console.
+### Networking — default VPC
+No custom VPC is created. Both RDS and the Lambda use the account's **default VPC** and its **default subnets**.
+
+The one network resource Terraform creates is a **new security group** for RDS: it allows inbound MySQL (port `3306`) from the Lambda and nothing else. The Lambda is attached to the default subnets so it can reach RDS privately through that security group.
 
 ### RDS MySQL
 The data tier. A managed relational database, so you don't handle patching, backups, or engine installation. MySQL because the backend code is already written against it.
+
+Lives in the **default VPC**, reachable only through the new security group (see Networking). DB credentials are handed to the Lambda as **environment variables** — there's no Secrets Manager in this setup.
 
 For **dev**: single AZ, `db.t3.micro`, no multi-AZ standby — keeps cost near zero.
 
 ### Lambda
 Runs the backend API code. No servers to manage, no EC2 to keep running — you pay only when requests come in, which is effectively free under the free tier for a dev/portfolio project.
 
-All **five API routes funnel into one Lambda function**: API Gateway handles routing, Lambda handles the logic.
+All **five API routes funnel into one Lambda function**: API Gateway handles routing, Lambda handles the logic. The function is attached to the **default VPC's subnets** so it can reach RDS, and reads the DB connection details from its environment variables.
 
 ### API Gateway
 Sits in front of Lambda and gives you a real **HTTPS endpoint**. Handles request routing, method matching (`GET /api/tasks`, `POST /api/tasks`, etc.) and Lambda invocation. Without it, the Lambda has no public URL.
@@ -41,10 +45,10 @@ Sits in front of Lambda and gives you a real **HTTPS endpoint**. Handles request
 **REST API** type specifically — gives full control over resources and methods, which maps cleanly to the five routes.
 
 ### IAM
-Not a service you call explicitly, but every Lambda needs an **execution role**. This one has three scoped permissions:
+Not a service you call explicitly, but every Lambda needs an **execution role**. This one has scoped permissions:
 
-- `secretsmanager:GetSecretValue` on the specific DB secret
 - `s3:GetObject` on the artifact bucket (Lambda reads its own zip during deployment)
+- VPC network-interface permissions (`AWSLambdaVPCAccessExecutionRole`) — required because the Lambda runs inside the default VPC to reach RDS
 - Basic Lambda execution permissions for CloudWatch Logs
 
 Least privilege — nothing broader than what the function actually needs.
@@ -81,7 +85,7 @@ tasks-app/
     │
     ├── modules/                     # reusable, no state, no backend
     │   ├── database/
-    │   │   ├── main.tf              # RDS MySQL + Secrets Manager + SG
+    │   │   ├── main.tf              # RDS MySQL + new security group (default VPC)
     │   │   ├── variables.tf
     │   │   └── outputs.tf
     │   ├── backend/
@@ -109,7 +113,7 @@ tasks-app/
 ```
 
 - **`bootstrap/`** — run once, before anything else, to create the S3 bucket that holds Terraform state for the environments.
-- **`modules/`** — reusable building blocks with no state or backend of their own: `database` (RDS MySQL + Secrets Manager + security group), `backend` (S3 artifact bucket + Lambda + API Gateway + IAM), `frontend` (Amplify app + branch). Called by environments.
+- **`modules/`** — reusable building blocks with no state or backend of their own: `database` (RDS MySQL + a new security group, in the default VPC), `backend` (S3 artifact bucket + Lambda + API Gateway + IAM), `frontend` (Amplify app + branch). Called by environments.
 - **`environments/`** — one directory per environment (`dev` / `staging` / `prod`), each calling the three modules with its own values, provider config, and remote-state backend. `terraform.tfvars` is gitignored; `terraform.tfvars.example` is committed to document the required vars.
 
 ## Local development

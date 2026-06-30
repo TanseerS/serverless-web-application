@@ -1,10 +1,3 @@
-variable "region" {
-    description = "Region for dev environment"
-    type = string
-    default = "ap-south-1"
-  
-}
-
 variable "project" {
     description = "The name of the project."
     type        = string
@@ -26,4 +19,14 @@ variable "password" {
     description = "The password for the database."
     type        = string
     sensitive   = true
+}
+
+variable "subnet_ids" {
+    type = list(string)
+    description = "Subnet IDs for the DB subnet group"
+}
+
+variable "vpc_id" {
+    type = string
+    description = "VPC in which security group lives"
 }

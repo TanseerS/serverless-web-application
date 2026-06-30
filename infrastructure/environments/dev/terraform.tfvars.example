@@ -1,1 +1,5 @@
 region = "ap-south-1"
+username = "admin"
+password = "admin123"
+environment = "dev"
+project = "todo-app"
